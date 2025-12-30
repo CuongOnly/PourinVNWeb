@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  Suspense
+  Suspense,
 } from 'react';
 import { ChevronDown, Mouse } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -32,7 +32,6 @@ const LazyAllProducts = React.lazy(() => import('./TrangChu/AllProducts'));
 const LazyTechnology = React.lazy(() => import('./TrangChu/Technology'));
 const LazyNewsSection = React.lazy(() => import('./TrangChu/NewSection'));
 const LazyTimelineItem = React.lazy(() => import('./TrangChu/TimelineItem'));
-const LazyLogoScroller = React.lazy(() => import('./TrangChu/LogoScroller'));
 const LazyLaboratorySection = React.lazy(() => import('./TrangChu/CompanyLaboratory'));
 const LazyFooterSection = React.lazy(() => import('./TrangChu/FooterSection'));
 
@@ -42,7 +41,6 @@ const AllProducts = dynamic(() => import('./TrangChu/AllProducts'));
 const Technology = dynamic(() => import('./TrangChu/Technology'));
 const NewsSection = dynamic(() => import('./TrangChu/NewSection'));
 const TimelineItem = dynamic(() => import('./TrangChu/TimelineItem'));
-const LogoScroller = dynamic(() => import('./TrangChu/LogoScroller'));
 const Laboratory = dynamic(() => import('./TrangChu/CompanyLaboratory'));
 const FooterSection = dynamic(() => import('./TrangChu/FooterSection'));
 const SettingsPanel = dynamic(() => import('./SettingsPanel'));
@@ -54,156 +52,187 @@ const SectionLoader = () => (
   </div>
 );
 
-// Scroll manager class for better performance
-class ScrollManager {
-  private isScrolling = false;
-  private lastScrollTime = 0;
-  private scrollThreshold = 50; // Minimum wheel delta to trigger scroll
-  private throttleTime = 800; // Time between scrolls in ms
-  private rafId: number | null = null;
+// Hook để theo dõi responsive mà không cần useEffect
+function useResponsive() {
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 0,
+    height: typeof window !== 'undefined' ? window.innerHeight : 0
+  });
 
-  constructor(
-    private onScrollNext: () => void,
-    private onScrollPrev: () => void,
-    private canScrollNext: () => boolean,
-    private canScrollPrev: () => boolean
-  ) { }
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
 
-  handleWheel = (deltaY: number): boolean => {
-    const now = Date.now();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-    // Throttle scroll events
-    if (now - this.lastScrollTime < this.throttleTime) {
-      return false;
-    }
-
-    // Ignore small wheel movements
-    if (Math.abs(deltaY) < this.scrollThreshold) {
-      return false;
-    }
-
-    // Prevent multiple simultaneous scrolls
-    if (this.isScrolling) {
-      return false;
-    }
-
-    this.lastScrollTime = now;
-    this.isScrolling = true;
-
-    // Determine scroll direction with debouncing
-    if (deltaY > 0 && this.canScrollNext()) {
-      this.onScrollNext();
-    } else if (deltaY < 0 && this.canScrollPrev()) {
-      this.onScrollPrev();
-    }
-
-    // Reset scrolling state after animation would complete
-    setTimeout(() => {
-      this.isScrolling = false;
-    }, this.throttleTime);
-
-    return true;
+  return {
+    isMobile: dimensions.width < 768,
+    width: dimensions.width,
+    height: dimensions.height
   };
+}
 
-  handleKeydown = (key: string): boolean => {
-    const now = Date.now();
-
-    if (now - this.lastScrollTime < this.throttleTime || this.isScrolling) {
-      return false;
+// Hook để quản lý visible sections mà không cần useEffect
+function useVisibleSections(currentSection: number) {
+  return useMemo(() => {
+    const sections = new Set<number>();
+    for (let i = Math.max(0, currentSection - 1); i <= Math.min(7, currentSection + 1); i++) {
+      sections.add(i);
     }
-
-    this.lastScrollTime = now;
-    this.isScrolling = true;
-
-    if ((key === 'ArrowDown' || key === 'PageDown') && this.canScrollNext()) {
-      this.onScrollNext();
-    } else if ((key === 'ArrowUp' || key === 'PageUp') && this.canScrollPrev()) {
-      this.onScrollPrev();
-    } else {
-      this.isScrolling = false;
-      return false;
-    }
-
-    setTimeout(() => {
-      this.isScrolling = false;
-    }, this.throttleTime);
-
-    return true;
-  };
-
-  cancel() {
-    if (this.rafId) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-    this.isScrolling = false;
-  }
+    return sections;
+  }, [currentSection]);
 }
 
 export default function LayoutHome() {
   const [currentSection, setCurrentSection] = useState(0);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [scrollMode, setScrollMode] = useState<'fullscreen' | 'smooth'>('fullscreen');
   const [showSettings, setShowSettings] = useState(false);
-  const [visibleSections, setVisibleSections] = useState<Set<number>>(new Set([0]));
   const [showCherryBlossom, setShowCherryBlossom] = useState(true);
+  
+  // Sử dụng custom hooks
+  const { isMobile } = useResponsive();
+  const visibleSections = useVisibleSections(currentSection);
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
-  const scrollManagerRef = useRef<ScrollManager | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   const toggleCherryBlossom = () => {
     setShowCherryBlossom(!showCherryBlossom);
   };
 
-  // Initialize scroll manager
+  // Tự động set scroll mode dựa trên device - KHÔNG DÙNG useEffect
+  const derivedScrollMode = isMobile ? 'smooth' : scrollMode;
+
+  // Optimized scroll to section
+  const scrollToSection = useCallback((sectionNumber: number, instant: boolean = false) => {
+    if (sectionNumber < 0 || sectionNumber > 7 || sectionNumber === currentSection) return;
+
+    const targetRef = sectionRefs.current[sectionNumber];
+    if (!targetRef || !containerRef.current) return;
+
+    // Cập nhật section hiện tại
+    setCurrentSection(sectionNumber);
+
+    if (derivedScrollMode === 'smooth' && !instant) {
+      targetRef.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+      return;
+    }
+
+    if (derivedScrollMode === 'fullscreen') {
+      containerRef.current.scrollTo({
+        top: targetRef.offsetTop,
+        behavior: instant ? 'auto' : 'smooth'
+      });
+    }
+  }, [derivedScrollMode, currentSection]);
+
+  // Handle wheel với requestAnimationFrame
+  const handleWheel = useCallback((e: WheelEvent) => {
+    if (derivedScrollMode !== 'fullscreen') return;
+
+    e.preventDefault();
+
+    if (Math.abs(e.deltaY) < 50) return;
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(() => {
+      if (e.deltaY > 0 && currentSection < 7) {
+        scrollToSection(currentSection + 1);
+      } else if (e.deltaY < 0 && currentSection > 0) {
+        scrollToSection(currentSection - 1);
+      }
+    });
+  }, [derivedScrollMode, currentSection, scrollToSection]);
+
+  // Handle keyboard với debounce
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (derivedScrollMode !== 'fullscreen') return;
+
+    e.preventDefault();
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(() => {
+      if ((e.key === 'ArrowDown' || e.key === 'PageDown') && currentSection < 7) {
+        scrollToSection(currentSection + 1);
+      } else if ((e.key === 'ArrowUp' || e.key === 'PageUp') && currentSection > 0) {
+        scrollToSection(currentSection - 1);
+      }
+    });
+  }, [derivedScrollMode, currentSection, scrollToSection]);
+
+  // Track smooth scroll - chỉ cần 1 useEffect cho scroll tracking
   useEffect(() => {
-    scrollManagerRef.current = new ScrollManager(
-      () => scrollToSection(currentSection + 1),
-      () => scrollToSection(currentSection - 1),
-      () => currentSection < 7,
-      () => currentSection > 0
-    );
+    if (derivedScrollMode !== 'smooth') return;
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const scrollTop = container.scrollTop;
+          const windowHeight = window.innerHeight;
+          const newSection = Math.round(scrollTop / windowHeight);
+
+          if (newSection !== currentSection && newSection >= 0 && newSection <= 7) {
+            setCurrentSection(newSection);
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [derivedScrollMode, currentSection]);
+
+  // Setup event listeners - chỉ 1 useEffect cho tất cả listeners
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (derivedScrollMode === 'fullscreen') {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      document.addEventListener('keydown', handleKeyDown);
+    }
 
     return () => {
-      scrollManagerRef.current?.cancel();
+      container.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('keydown', handleKeyDown);
+      
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
-  }, [currentSection]);
+  }, [derivedScrollMode, handleWheel, handleKeyDown]);
 
-  // Device detection
-  useEffect(() => {
-    const checkDevice = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      setScrollMode(mobile ? 'smooth' : 'fullscreen');
-    };
-
-    checkDevice();
-
-    let resizeTimeout: NodeJS.Timeout;
-    const handleResize = () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(checkDevice, 100);
-    };
-
-    window.addEventListener('resize', handleResize, { passive: true });
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(resizeTimeout);
-    };
-  }, []);
-
-  // Optimized video loading
+  // Video loading - chỉ 1 useEffect cho video
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handleLoadedData = () => {
-      setIsVideoLoaded(true);
-      video.style.willChange = 'auto';
-    };
-
+    const handleLoadedData = () => setIsVideoLoaded(true);
     const handleError = () => setIsVideoLoaded(true);
 
     video.preload = "metadata";
@@ -222,10 +251,7 @@ export default function LayoutHome() {
       { threshold: 0.5 }
     );
 
-    if (video) {
-      observer.observe(video);
-    }
-
+    observer.observe(video);
     video.addEventListener('loadeddata', handleLoadedData);
     video.addEventListener('error', handleError);
 
@@ -235,124 +261,6 @@ export default function LayoutHome() {
       observer.disconnect();
     };
   }, [isVideoLoaded]);
-
-  // Preload nearby sections
-  useEffect(() => {
-    const newVisibleSections = new Set(visibleSections);
-    for (let i = Math.max(0, currentSection - 1); i <= Math.min(7, currentSection + 1); i++) {
-      newVisibleSections.add(i);
-    }
-
-    if (newVisibleSections.size !== visibleSections.size) {
-      setVisibleSections(newVisibleSections);
-    }
-  }, [currentSection, visibleSections]);
-
-  // Optimized scroll to section with performance improvements
-  const scrollToSection = useCallback((sectionNumber: number, instant: boolean = false) => {
-    if (sectionNumber < 0 || sectionNumber > 7 || sectionNumber === currentSection) return;
-
-    const targetRef = sectionRefs.current[sectionNumber];
-    if (!targetRef || !containerRef.current) return;
-
-    setCurrentSection(sectionNumber);
-
-    if (scrollMode === 'smooth' && !instant) {
-      targetRef.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-      return;
-    }
-
-    if (scrollMode === 'fullscreen') {
-      // Use CSS snap for fullscreen mode - most performant
-      containerRef.current.scrollTo({
-        top: targetRef.offsetTop,
-        behavior: instant ? 'auto' : 'smooth'
-      });
-    }
-  }, [scrollMode, currentSection]);
-
-  // Ultra-optimized wheel handler
-  const handleWheel = useCallback((e: WheelEvent) => {
-    if (scrollMode !== 'fullscreen') return;
-
-    e.preventDefault();
-
-    if (scrollManagerRef.current) {
-      const handled = scrollManagerRef.current.handleWheel(e.deltaY);
-      if (handled) {
-        e.stopPropagation();
-      }
-    }
-  }, [scrollMode]);
-
-  // Optimized keyboard handler
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (scrollMode !== 'fullscreen') return;
-
-    if (scrollManagerRef.current) {
-      const handled = scrollManagerRef.current.handleKeydown(e.key);
-      if (handled) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }
-  }, [scrollMode]);
-
-  // Smooth scroll tracking
-  useEffect(() => {
-    if (scrollMode !== 'smooth') return;
-
-    const container = containerRef.current;
-    if (!container) return;
-
-    let ticking = false;
-    const updateCurrentSection = () => {
-      const scrollTop = container.scrollTop;
-      const windowHeight = window.innerHeight;
-      const newSection = Math.round(scrollTop / windowHeight);
-
-      if (newSection !== currentSection && newSection >= 0 && newSection <= 7) {
-        setCurrentSection(newSection);
-      }
-      ticking = false;
-    };
-
-    const handleScroll = () => {
-      if (!ticking) {
-        requestAnimationFrame(updateCurrentSection);
-        ticking = true;
-      }
-    };
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [scrollMode, currentSection]);
-
-  // Optimized event listeners with passive where possible
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    if (scrollMode === 'fullscreen') {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-      document.addEventListener('keydown', handleKeyDown);
-    }
-
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [scrollMode, handleWheel, handleKeyDown]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      scrollManagerRef.current?.cancel();
-    };
-  }, []);
 
   // Memoized values
   const getColor = useCallback(() => {
@@ -367,21 +275,21 @@ export default function LayoutHome() {
   const toggleScrollMode = useCallback(() => {
     if (isMobile) return;
 
-    const newMode = scrollMode === 'fullscreen' ? 'smooth' : 'fullscreen';
+    const newMode = derivedScrollMode === 'fullscreen' ? 'smooth' : 'fullscreen';
     setScrollMode(newMode);
 
     // Reset to current section in new mode
     setTimeout(() => {
       scrollToSection(currentSection, true);
     }, 50);
-  }, [scrollMode, currentSection, scrollToSection, isMobile]);
+  }, [derivedScrollMode, currentSection, scrollToSection, isMobile]);
 
   const containerClassName = useMemo(() =>
-    `fixed inset-0 w-screen h-screen overflow-hidden ${scrollMode === 'fullscreen'
+    `fixed inset-0 w-screen h-screen overflow-hidden ${derivedScrollMode === 'fullscreen'
       ? 'snap-y snap-mandatory overflow-y-scroll'
       : 'overflow-y-auto'
     }`,
-    [scrollMode]
+    [derivedScrollMode]
   );
 
   const renderSection = (index: number, Component: React.ComponentType, Fallback?: React.ComponentType) => {
@@ -409,7 +317,6 @@ export default function LayoutHome() {
       <style>{`
         div::-webkit-scrollbar { display: none; }
         
-        /* Hardware acceleration and performance optimizations */
         .performance-layer {
           transform: translateZ(0);
           backface-visibility: hidden;
@@ -425,10 +332,8 @@ export default function LayoutHome() {
         .section-snap {
           scroll-snap-align: start;
           scroll-snap-stop: always;
-          contain: layout style paint;
         }
         
-        /* Smooth animations */
         @keyframes fadeInUp {
           from { 
             opacity: 0; 
@@ -444,7 +349,6 @@ export default function LayoutHome() {
           animation: fadeInUp 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
         }
         
-        /* Gentle bounce animation for scroll indicator */
         @keyframes gentle-bounce {
           0%, 20%, 50%, 80%, 100% {
             transform: translate3d(0, 0, 0);
@@ -461,19 +365,13 @@ export default function LayoutHome() {
           animation: gentle-bounce 3s ease-in-out infinite;
         }
         
-        /* Reduced motion support */
         @media (prefers-reduced-motion: reduce) {
           .animate-fade-in-up,
           .animate-gentle-bounce {
             animation: none;
           }
-          
-          .scroll-container {
-            scroll-behavior: auto;
-          }
         }
         
-        /* Video optimization */
         .video-optimized {
           transform: translateZ(0);
           backface-visibility: hidden;
@@ -492,7 +390,6 @@ export default function LayoutHome() {
         />
       </div>
 
-      {/* SECTION 1 - Video Background */}
       {/* SECTION 1 - Video Background */}
       <section
         ref={el => { sectionRefs.current[0] = el; }}
@@ -519,13 +416,12 @@ export default function LayoutHome() {
             preload="metadata"
           >
             <source
-              src="https://res.cloudinary.com/doooncpse/video/upload/v1762587725/7202221208711_safwfv.mp4"
+              src="https://res.cloudinary.com/doooncpse/video/upload/v1767082625/1230_1_nmf7qb.mp4"
               type="video/mp4"
             />
           </video>
         </div>
 
-        {/* Gradient overlay để text dễ đọc hơn */}
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
 
         <div
@@ -533,10 +429,10 @@ export default function LayoutHome() {
                 ${isVideoLoaded ? 'animate-fade-in-up' : 'opacity-0'}`}
           style={{
             maxWidth: 'min(900px, 90vw)',
-            marginTop: '-5%' // Điều chỉnh vị trí dọc
+            marginTop: '-5%'
           }}
         >
-          <h1 className="text-4xl md:text-6xl lg:text-7xl xl:text-8xl 
+          <h1 className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl 
                    font-black mb-4 md:mb-6 text-white performance-layer
                    leading-tight md:leading-none">
             Welcome to<br />
@@ -548,16 +444,15 @@ export default function LayoutHome() {
 
           <div className="relative">
             <div className="absolute -left-4 top-1/2 w-1 h-16 -translate-y-1/2 
-                      bg-gradient-to-b from-blue-400 to-purple-400 rounded-full" />
+                      bg-gradient-to-b rounded-full" />
 
-            <p className="text-lg md:text-xl lg:text-2xl text-white/90 
+            <p className="text-lg md:text-lg lg:text-xl text-white/90 
                    mb-2 pl-6 border-l-2 border-white/20 
                    backdrop-blur-sm bg-white/5 p-4 rounded-r-xl">
               Join us in creating value<br />
               and growing together!
             </p>
 
-            {/* Call to Action Button */}
             <div className="mt-6 md:mt-8 pl-6">
               <button
                 className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 
@@ -574,15 +469,14 @@ export default function LayoutHome() {
           </div>
         </div>
 
-        {/* Decorative elements */}
-        <div className="absolute bottom-8 left-8 md:left-16 flex items-center gap-3 text-white/50 text-sm">
+        {/* <div className="absolute bottom-8 left-8 md:left-16 flex items-center gap-3 text-white/50 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             <span>Live</span>
           </div>
           <span className="text-white/30">•</span>
           <span>Scroll to explore</span>
-        </div>
+        </div> */}
       </section>
 
       {/* SECTION 2 */}
@@ -655,9 +549,9 @@ export default function LayoutHome() {
       </div>
 
       {/* Navigation Sidebar */}
-      {(scrollMode === 'fullscreen' || !isMobile) && (
-        <div className="fixed left-4 md:left-8 top-1/2 -translate-y-1/2 z-50 hidden md:block performance-layer">
-          <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-300/50 -translate-x-1/2" />
+      {(derivedScrollMode === 'fullscreen' || !isMobile) && (
+        <div className="fixed right-4 md:right-8 top-1/2 -translate-y-1/2 z-50 hidden md:block performance-layer">
+          <div className="absolute right-1/2 top-0 bottom-0 w-px bg-gray-300/50 -translate-x-1/2" />
 
           <div className="relative flex flex-col gap-6">
             {['Welcome', 'About', 'Products', 'Technology', 'Laboratory', 'News', 'Timeline', 'Contact'].map((title, index) => (
@@ -672,7 +566,7 @@ export default function LayoutHome() {
             ))}
           </div>
 
-          <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 text-center">
+          <div className="absolute -bottom-16 right-1/2 -translate-x-1/2 text-center">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
               Section
             </div>
@@ -687,7 +581,7 @@ export default function LayoutHome() {
       )}
 
       {/* Scroll Indicator */}
-      {currentSection < 7 && scrollMode === 'fullscreen' && (
+      {currentSection < 7 && derivedScrollMode === 'fullscreen' && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 performance-layer">
           <div className="flex flex-col items-center gap-1 animate-gentle-bounce opacity-70 hover:opacity-100 transition-opacity duration-300">
             <Mouse
@@ -713,15 +607,16 @@ export default function LayoutHome() {
         showSettings={showSettings}
         setShowSettings={setShowSettings}
         isMobile={isMobile}
-        scrollMode={scrollMode}
+        scrollMode={derivedScrollMode}
         toggleScrollMode={toggleScrollMode}
         getColor={getColor}
         showCherryBlossom={showCherryBlossom}
         toggleCherryBlossom={toggleCherryBlossom}
       />
       {showCherryBlossom && <CherryBlossom />}
+      
       {/* Keyboard Shortcuts Hint */}
-      {scrollMode === 'fullscreen' && !isMobile && (
+      {derivedScrollMode === 'fullscreen' && !isMobile && (
         <div className="fixed bottom-6 right-24 z-40 performance-layer">
           <div className="flex gap-1.5 items-center backdrop-blur-xl bg-white/50 px-3 py-2 rounded-full shadow-lg opacity-50 hover:opacity-100 transition-opacity duration-300">
             <span className="text-xs text-gray-600 font-medium">Use</span>
