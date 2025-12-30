@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  output: "export",
   images: {
     remotePatterns: [
       {
@@ -12,6 +13,7 @@ const nextConfig: NextConfig = {
       },
       
     ],
+    unoptimized: true,
     domains: ['images.unsplash.com', 'omo-oss-image.thefastimg.com'],
   },
 };
