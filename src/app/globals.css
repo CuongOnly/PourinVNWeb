@@ -1,0 +1,111 @@
+/* Thay hoàn toàn Preahvihear + Geist bằng combo ĐẸP NHẤT 2025 cho landing page đa ngôn ngữ */
+/* Tiếng Việt + Anh + Trung (Giản thể & Phồn thể) đều đẹp lung linh */
+/* Tốc độ load siêu nhanh (Fontshare + jsDelivr CDN) */
+
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&f[]=manrope@200,300,400,500,600,700,800&f[]=clash-display@500,600,700&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/ixkaito/PuHuiTi@latest/alibaba-puhuiti.css');
+@import "tailwindcss";
+
+/* ==================== MÀU SẮC (giữ nguyên yêu cầu của bạn) ==================== */
+:root {
+  --background: #0b0416;
+  --foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ==================== FONT ĐẸP NHẤT 2025 ==================== */
+:root {
+  /* Latin + Tiếng Việt */
+  --font-heading: "Satoshi", sans-serif;
+  --font-body: "Manrope", sans-serif;
+  --font-display: "Clash Display", sans-serif;
+
+  /* Tiếng Trung */
+  --font-cn: "Alibaba PuHuiTi", "阿里巴巴普惠体", "PingFang SC", "PingFang TC", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* Thứ tự ưu tiên: Tiếng Việt/Anh → Manrope → fallback → Tiếng Trung */
+  font-family: var(--font-body), var(--font-cn), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Ẩn scrollbar nhưng vẫn scroll được */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
+/* Ẩn scrollbar trên Webkit browsers (Chrome, Safari, etc) */
+body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Heading tiếng Việt + Anh */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.text-7xl,
+.text-6xl,
+.text-5xl,
+.text-4xl {
+  font-family: var(--font-heading), var(--font-cn), sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Hero title cực lớn (rất hot 2025) */
+.text-8xl,
+.text-9xl,
+.hero-title,
+.display-1 {
+  font-family: var(--font-display), var(--font-cn), sans-serif !important;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+/* Tự động chuyển font đẹp khi dùng tiếng Trung */
+html[lang*="zh"] body,
+html[lang="zh-CN"],
+html[lang="zh-TW"],
+html[lang="zh-HK"] {
+  font-family: var(--font-cn), system-ui, sans-serif;
+}
+
+html[lang*="zh"] h1,
+html[lang*="zh"] h2,
+html[lang*="zh"] h3,
+html[lang*="zh"] .text-7xl,
+html[lang*="zh"] .hero-title {
+  font-family: var(--font-cn), sans-serif;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+/* ==================== TAILWIND THEME OVERRIDE (chỉ sửa font) ==================== */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* Thay hết Geist bằng font đẹp hơn + hỗ trợ tiếng Việt/Trung hoàn hảo */
+  --font-sans: var(--font-body), var(--font-cn), system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+}
