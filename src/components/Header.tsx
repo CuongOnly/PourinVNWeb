@@ -93,7 +93,7 @@ const Header = () => {
       label: t.navigation.partners,
       type: "simple" as const,
     },
-    { href: "/hr", label: "Tuyển dụng", type: "nav" as const },
+    { href: "/hr", label: t.navigation.hr, type: "nav" as const },
   ];
 
   return (

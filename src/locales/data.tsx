@@ -18,6 +18,9 @@ export interface TranslationData {
     learnMore: string;
     readMore: string;
     development: string;
+    contentVideo: string;
+    navContentVideo: string;
+    buttonContentVideo: string;
   };
   navigation: {
     welcome: string;
@@ -222,6 +225,9 @@ export const translations: Record<Language, TranslationData> = {
       learnMore: 'Tìm hiểu thêm',
       readMore: 'Đọc thêm',
       development: "",
+      contentVideo: "Chào mừng đến Pourin Việt Nam",
+      navContentVideo: "Tập trung chuyên sâu vào lĩnh vực hàn lớp chống ăn mòn và chống mài mòn cho nồi hơi \nNhà sản xuất uy tín",
+      buttonContentVideo: "Xem thêm"
     },
     navigation: {
       welcome: 'Trang chủ',
@@ -507,6 +513,9 @@ export const translations: Record<Language, TranslationData> = {
       learnMore: 'Learn More',
       readMore: 'Read More',
       development: "",
+      contentVideo: "Welcome to Pourin Viet Nam",
+      navContentVideo: "Anti-Corrosion & Wear-Resistant Solutions,Customized by Pourin",
+      buttonContentVideo: "Learn more"
     },
     navigation: {
       welcome: 'Welcome',
@@ -790,6 +799,9 @@ export const translations: Record<Language, TranslationData> = {
       learnMore: '了解更多',
       readMore: '阅读更多',
       development: "",
+      contentVideo: "博盈特焊越南",
+      navContentVideo: "深耕锅炉防腐防磨堆焊领域 实力制造商",
+      buttonContentVideo: "了解更多"
     },
     navigation: {
       welcome: '首页',
