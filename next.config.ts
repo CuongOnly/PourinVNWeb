@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'arman-borkhani.github.io',
         pathname: '/**',
+        port: '',
       },
       
     ],
